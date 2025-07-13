@@ -1,0 +1,89 @@
+import mysql.connector
+import QR_code_march_2025
+conn_obj=mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="R@jdeep123",
+    database="final_project_mysql_march_2025")
+cur_obj=conn_obj.cursor()
+
+#Define function data_entry_sql
+def data_entry_sql(full_name,address,phone_number):
+    sql = "INSERT INTO CUST_DETAILS (FULL_NAME, CUST_ADDRESS, CUST_PH_NO) VALUES (%s, %s, %s)"
+    data = (full_name,address,phone_number)
+
+    try:
+        cur_obj.execute(sql, data)
+        print("New customer entry successful")
+        conn_obj.commit()
+    except mysql.connector.Error as e:
+        print("Error retrieving data from MySQL:", e)
+        conn_obj.rollback()
+
+#Define function data_retrieve
+def data_retrieve(phone_number):
+    query = f"select * from CUST_DETAILS WHERE CUST_PH_NO={phone_number}"
+
+    try:
+        cur_obj.execute(query)
+        result = cur_obj.fetchone()
+        conn_obj.commit()
+    except mysql.connector.Error as e:
+        print("Error retrieving data from MySQL:", e)
+        conn_obj.rollback()
+
+    return result
+
+def product_details_extraction(p_id):
+    query = f"select * from PRODUCT_DETAILS WHERE P_ID={p_id}"
+
+    try:
+        cur_obj.execute(query)
+        result = cur_obj.fetchone()
+        conn_obj.commit()
+    except mysql.connector.Error as e:
+        print("Error retrieving data from MySQL:", e)
+        conn_obj.rollback()
+
+    return result
+def audit_table_record_insert(c_id,full_name,phone_number,total_bill_amount):
+    sql = "INSERT INTO audit_table (Cust_id,cust_full_name, cust_ph_no, total_bill_amount) VALUES (%s, %s, %s, %s)"
+    data = (c_id,full_name,phone_number,total_bill_amount)
+
+    try:
+        cur_obj.execute(sql, data)
+        print("Audit table entry successful")
+        conn_obj.commit()
+    except mysql.connector.Error as e:
+        print("Error retrieving data from MySQL:", e)
+        conn_obj.rollback()
+def billing_function(c_id,full_name,phone_number):
+    total_bill_amount=0
+    while True:
+        #p_id=input("Please enter product id or F to see the final bill->").upper()
+        output_from_qr_code=QR_code_march_2025.qr_code_scanner()
+        p_id=output_from_qr_code.split("-")[0].upper()
+        if p_id!='F':
+            P_quantity = int(input("Please enter quantity of product->"))
+            product_details_from_db=product_details_extraction(p_id)
+            product_price_db=product_details_from_db[2]
+            bill_mount=product_price_db*P_quantity
+            total_bill_amount=total_bill_amount+bill_mount
+        else:
+            break
+    print("Total bill amount->",total_bill_amount)
+    audit_table_record_insert(c_id,full_name,phone_number,total_bill_amount)
+
+#main program start...
+phone_number=input("Please enter customer phone number->")
+result_from_db=data_retrieve(phone_number)
+if result_from_db:
+    #start of billing
+    billing_function(result_from_db[0],result_from_db[1],result_from_db[3])
+else:
+    full_name=input("Please enter full name of customer->").upper()
+    address = input("Please enter address of customer->").upper()
+    data_entry_sql(full_name,address,phone_number)
+    result_from_db = data_retrieve(phone_number)
+    billing_function(result_from_db[0],result_from_db[1],result_from_db[3])
+conn_obj.close()
