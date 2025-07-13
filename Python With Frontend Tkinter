@@ -1,0 +1,224 @@
+import mysql.connector
+import QR_code_march_2025
+import tkinter as tk
+from tkinter import messagebox, simpledialog
+
+# Database connection
+conn_obj = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password="R@jdeep123",
+    database="final_project_mysql_march_2025"
+)
+cur_obj = conn_obj.cursor()
+
+# Define database functions
+def data_entry_sql(full_name, address, phone_number):
+    sql = "INSERT INTO CUST_DETAILS (FULL_NAME, CUST_ADDRESS, CUST_PH_NO) VALUES (%s, %s, %s)"
+    data = (full_name, address, phone_number)
+
+    try:
+        cur_obj.execute(sql, data)
+        conn_obj.commit()
+        messagebox.showinfo("Success", "New customer entry successful")
+    except mysql.connector.Error as e:
+        conn_obj.rollback()
+        messagebox.showerror("Error", f"Error inserting data: {e}")
+
+def data_retrieve(phone_number):
+    query = f"SELECT * FROM CUST_DETAILS WHERE CUST_PH_NO={phone_number}"
+    try:
+        cur_obj.execute(query)
+        result = cur_obj.fetchone()
+        conn_obj.commit()
+        return result
+    except mysql.connector.Error as e:
+        conn_obj.rollback()
+        messagebox.showerror("Error", f"Error retrieving data: {e}")
+
+def product_details_extraction(p_id):
+    query = f"SELECT * FROM PRODUCT_DETAILS WHERE P_ID={p_id}"
+    try:
+        cur_obj.execute(query)
+        result = cur_obj.fetchone()
+        conn_obj.commit()
+        return result
+    except mysql.connector.Error as e:
+        conn_obj.rollback()
+        messagebox.showerror("Error", f"Error retrieving product: {e}")
+
+def audit_table_record_insert(c_id, full_name, phone_number, total_bill_amount):
+    sql = "INSERT INTO audit_table (Cust_id, cust_full_name, cust_ph_no, total_bill_amount) VALUES (%s, %s, %s, %s)"
+    data = (c_id, full_name, phone_number, total_bill_amount)
+
+    try:
+        cur_obj.execute(sql, data)
+        conn_obj.commit()
+        messagebox.showinfo("Success", "Audit table entry successful")
+    except mysql.connector.Error as e:
+        conn_obj.rollback()
+        messagebox.showerror("Error", f"Error inserting into audit_table: {e}")
+
+
+# Cart data container
+cart_data = {
+    "customer": {},
+    "items": [],
+    "total": 0
+}
+
+
+# Billing Functions
+def scan_qr_and_add_product():
+    """Scan QR Code and add product to cart with quantity prompt"""
+    scanned_output = QR_code_march_2025.qr_code_scanner()
+    if not scanned_output:
+        messagebox.showwarning("Scan Failed", "No QR Code detected. Please try again.")
+        return
+
+    p_id = scanned_output.split("-")[0].upper()
+    product_details = product_details_extraction(p_id)
+
+    if product_details:
+        product_name = product_details[1]
+        product_price = product_details[2]
+
+        # Prompt user for quantity
+        try:
+            qty = simpledialog.askinteger("Quantity", f"Enter quantity for {product_name}:", minvalue=1)
+            if qty is None:
+                messagebox.showinfo("Cancelled", "Quantity input cancelled.")
+                return
+        except Exception as e:
+            messagebox.showerror("Error", f"Invalid quantity: {e}")
+            return
+
+        subtotal = product_price * qty
+
+        # Add to cart
+        cart_data["items"].append((p_id, product_name, qty, product_price, subtotal))
+        cart_data["total"] += subtotal
+
+        # Update cart display
+        cart_listbox.insert(tk.END, f"{product_name} (x{qty}) - ₹{subtotal:.2f}")
+
+        # Update total
+        label_total.config(text=f"Total Bill: ₹{cart_data['total']:.2f}")
+    else:
+        messagebox.showerror("Not Found", f"Product ID {p_id} not found in database.")
+
+
+def finalize_bill():
+    if not cart_data["items"]:
+        messagebox.showwarning("Empty Cart", "No products in the cart to bill.")
+        return
+
+    c_id = cart_data["customer"]["c_id"]
+    full_name = cart_data["customer"]["full_name"]
+    phone_number = cart_data["customer"]["phone_number"]
+
+    audit_table_record_insert(c_id, full_name, phone_number, cart_data["total"])
+
+    messagebox.showinfo("Billing Complete", f"Final Bill: ₹{cart_data['total']:.2f}")
+
+    # Reset for next customer
+    cart_listbox.delete(0, tk.END)
+    label_total.config(text="Total Bill: ₹0.00")
+    cart_data["items"].clear()
+    cart_data["total"] = 0
+
+
+# GUI Functions
+def start_billing():
+    phone_number = entry_phone.get().strip()
+    if not phone_number.isdigit():
+        messagebox.showerror("Invalid Input", "Please enter a valid phone number.")
+        return
+
+    result_from_db = data_retrieve(phone_number)
+    if result_from_db:
+        # Existing customer
+        cart_data["customer"].update({
+            "c_id": result_from_db[0],
+            "full_name": result_from_db[1],
+            "phone_number": result_from_db[3]
+        })
+        frame_billing.pack(fill="both", expand=True)
+    else:
+        # New customer
+        full_name = entry_name.get().strip().upper()
+        address = entry_address.get().strip().upper()
+        if not full_name or not address:
+            messagebox.showwarning("Missing Info", "Please enter customer name and address.")
+            return
+        data_entry_sql(full_name, address, phone_number)
+        result_from_db = data_retrieve(phone_number)
+        cart_data["customer"].update({
+            "c_id": result_from_db[0],
+            "full_name": result_from_db[1],
+            "phone_number": result_from_db[3]
+        })
+        frame_billing.pack(fill="both", expand=True)
+
+
+# Tkinter Frontend
+root = tk.Tk()
+root.title("Supermarket Billing System")
+root.geometry("700x600")
+root.config(bg="#f0f4f7")
+
+# ======= Customer Entry Frame =======
+frame_customer = tk.Frame(root, bg="#f0f4f7")
+frame_customer.pack(fill="x", pady=10)
+
+title_label = tk.Label(frame_customer, text="Supermarket Billing System", font=("Arial", 20, "bold"), fg="#1a73e8", bg="#f0f4f7")
+title_label.pack(pady=10)
+
+# Phone Number
+label_phone = tk.Label(frame_customer, text="Customer Phone Number:", font=("Arial", 12), bg="#f0f4f7")
+label_phone.pack()
+entry_phone = tk.Entry(frame_customer, font=("Arial", 12), width=30)
+entry_phone.pack(pady=5)
+
+# Full Name
+label_name = tk.Label(frame_customer, text="Customer Full Name (New):", font=("Arial", 12), bg="#f0f4f7")
+label_name.pack()
+entry_name = tk.Entry(frame_customer, font=("Arial", 12), width=30)
+entry_name.pack(pady=5)
+
+# Address
+label_address = tk.Label(frame_customer, text="Customer Address (New):", font=("Arial", 12), bg="#f0f4f7")
+label_address.pack()
+entry_address = tk.Entry(frame_customer, font=("Arial", 12), width=30)
+entry_address.pack(pady=5)
+
+# Start Billing Button
+btn_billing = tk.Button(frame_customer, text="Start Billing", font=("Arial", 14), bg="#1a73e8", fg="white", width=20, command=start_billing)
+btn_billing.pack(pady=10)
+
+# ======= Billing Frame =======
+frame_billing = tk.Frame(root, bg="#f8f9fa")
+frame_billing.pack_forget()  # Hide initially
+
+# Scan QR Code Button
+btn_scan_qr = tk.Button(frame_billing, text="Scan Product QR Code", font=("Arial", 14), bg="#28a745", fg="white", width=25, command=scan_qr_and_add_product)
+btn_scan_qr.pack(pady=10)
+
+# Cart Listbox
+cart_label = tk.Label(frame_billing, text="Cart Items:", font=("Arial", 14, "bold"), bg="#f8f9fa")
+cart_label.pack()
+cart_listbox = tk.Listbox(frame_billing, font=("Arial", 12), width=50, height=10)
+cart_listbox.pack(pady=5)
+
+# Total Label
+label_total = tk.Label(frame_billing, text="Total Bill: ₹0.00", font=("Arial", 14, "bold"), fg="#e84545", bg="#f8f9fa")
+label_total.pack(pady=10)
+
+# Finalize Bill Button
+btn_finalize = tk.Button(frame_billing, text="Finalize Bill", font=("Arial", 14), bg="#1a73e8", fg="white", width=20, command=finalize_bill)
+btn_finalize.pack(pady=10)
+
+root.mainloop()
+
+# Close DB connection on exit
+conn_obj.close()
