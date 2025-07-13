@@ -1,0 +1,13 @@
+provide a mysql table DDL for the table name audit_table , where column names are bill_id(auto_increment), cust_full_name, cust_ph_no , total_bill_amount, timestamp
+
+provide 2 insert statements for the above table
+
+take the below python code and add the frontend with tkinter module , add stunning frontend and if required add buttons depending upon input or print 
+
+code is throwing error in simpledialog, rectify and send the rectified code ,
+
+getting error as - SyntaxError: name 'total_bill_amount' is used prior to global declaration
+
+I want to scan the qr code and insert the product id through tha scanner code , dont make the dialogue box for entering the product id , update the code 
+
+code is good as of now, just let me in the quantity of product through dialogue box , and I want to scan the qr code thorugh the QR code scanner as it is, do not change anything else 
